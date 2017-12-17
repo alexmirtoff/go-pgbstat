@@ -1,8 +1,8 @@
 /*
 
 *** (c) 2017-2018 by Alex Mirtoff
-*** amirtov@alfabank.ru
 *** alex@mirtoff.ru
+*** telegram: mirt0ff
 
 Getting statistics data from pgBouncer by sql connection and inserting it into
 InfluxDB or Zabbix. Single database & user.
@@ -176,6 +176,17 @@ func main() {
         log.Fatal(err)
     }
     */
+
+     // Create a new HTTP client
+    inflxConnect, err := client.NewHTTPClient(client.HTTPConfig{
+                  Addr:         inflxHost,
+                  Username:     inflxUser,
+                  Password:     inflxPwd,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
  
     for {
 
@@ -192,6 +203,8 @@ func main() {
     serversResult, err := getBouncerServerData(db)
     statsResult, err := getBouncerStatData(db)
     listsResult, err := getBouncerListData(db)
+
+    db.Close()
 
     poolsMap := make(map[string]interface{})
     dbMap    := make(map[string]interface{})
@@ -271,16 +284,6 @@ func main() {
     }
     for _, pgLists := range listsResult {
         listsMap[pgLists.list] = pgLists.items
-    }
-
-    // Create a new HTTP client   
-    inflxConnect, err := client.NewHTTPClient(client.HTTPConfig{
-                  Addr:		inflxHost,
-	  	  Username:	inflxUser,
-		  Password:	inflxPwd,
-    })
-    if err != nil {
-        log.Fatal(err)
     }
 
     // check empty maps
@@ -536,5 +539,6 @@ func writeBatch(inflxConnect client.Client, BPoint client.BatchPoints) {
  if err := inflxConnect.Write(BPoint); err != nil {
         log.Fatal(err)
  }
+ inflxConnect.Close()
 
 }
