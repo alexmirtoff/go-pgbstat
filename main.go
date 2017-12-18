@@ -2,7 +2,8 @@
 
 *** (c) 2017-2018 by Alex Mirtoff
 *** alex@mirtoff.ru
-*** telegram: mirt0ff
+*** telegram: @mirt0ff
+*** version 0.1.2
 
 Getting statistics data from pgBouncer by sql connection and inserting it into
 InfluxDB or Zabbix. Single database & user.
@@ -114,10 +115,16 @@ func main() {
         fmt.Print("-d daemonize\n-v version\n\n")
         os.Exit(0)
     } else if os.Args[1] == "-v" {
-        fmt.Print("go-pgbstat version 0.1\n\u00a9 2017-2018 by Alex Mirtoff\ne-mail: amirtov@alfabank.ru\nhttps://github.com/alexmirtoff\n\n")
+        fmt.Print("go-pgbstat version 0.1.2\n\u00a9 2017-2018 by Alex Mirtoff\ne-mail: amirtov@alfabank.ru\nhttps://github.com/alexmirtoff\n\n")
 	os.Exit(0)
     } 
     
+    // Global settings init
+    sendInt, err := conf.Int("global.send_interval")
+    if err != nil {
+        log.Fatal(err)
+    }
+
     // pgbouncer settings init
     bhost, err := conf.String("pgbouncer.hostname")
     if err != nil {
@@ -137,7 +144,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    _, err = conf.String("pgbouncer.password")
+    bpassword, err := conf.String("pgbouncer.password")
     if err != nil {
         log.Fatal(err)
     }
@@ -190,7 +197,7 @@ func main() {
  
     for {
 
-    sqlParams := fmt.Sprintf("host=%s user=%s port=%s dbname=%s sslmode=disable", bhost, busername, bport, bdatabase) 
+    sqlParams := fmt.Sprintf("host=%s user=%s password=%s port=%s dbname=%s sslmode=disable", bhost, busername, bpassword, bport, bdatabase) 
     db, err := sql.Open("postgres", sqlParams)
     if err != nil {
         log.Fatal(err)
@@ -330,7 +337,7 @@ func main() {
             log.Fatal(err)
         }
     }
-   time.Sleep(5000 * time.Millisecond)
+   time.Sleep(time.Duration(sendInt) * time.Millisecond)
    }
   
 }
