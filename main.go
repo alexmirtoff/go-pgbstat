@@ -103,6 +103,14 @@ type PgbouncerLists struct {
     items	  string
 }
 
+type InfluxTags struct {
+    tag		  map[string]string
+}
+
+type InfluxFields struct {
+    field	  map[string]interface{}
+}
+
 
 // start here
 func main() {
@@ -220,10 +228,10 @@ func main() {
     statsMap := make(map[string]interface{})
     listsMap := make(map[string]interface{})
 
-
+    poolsTags := make(map[string]string)
     for _, pgLists := range poolsResult {
-        poolsMap["database"]   = pgLists.database
-	poolsMap["user"]       = pgLists.user
+        poolsTags["database"]  = pgLists.database
+        poolsTags["user"]      = pgLists.user
         poolsMap["cl_active"]  = pgLists.cl_active
 	poolsMap["cl_waiting"] = pgLists.cl_waiting
 	poolsMap["sv_active"]  = pgLists.sv_active
@@ -233,12 +241,13 @@ func main() {
 	poolsMap["sv_login"]   = pgLists.sv_login
 	poolsMap["maxwait"]    = pgLists.maxwait
 	poolsMap["pool_mode"]  = pgLists.pool_mode
-    }  
+    }
+    dbTags := make(map[string]string)
     for _, pgLists := range databasesResult {
-        dbMap["name"]          = pgLists.name
+        dbTags["name"]	       = pgLists.name
 	dbMap["host"]          = pgLists.host
 	dbMap["port"]          = pgLists.port
-	dbMap["database"]      = pgLists.database
+        dbTags["database"]     = pgLists.database
 	dbMap["force_user"]    = pgLists.force_user
 	dbMap["pool_size"]     = pgLists.pool_size
 	dbMap["reserve_pool"]  = pgLists.reserve_pool
@@ -246,10 +255,11 @@ func main() {
 	dbMap["max_conn"]      = pgLists.max_conn
 	dbMap["curr_conn"]     = pgLists.curr_conn
     }
+    clTags := make(map[string]string)
     for _, pgLists := range clientsResult {
         clMap["type"]          = pgLists.cl_type
-	clMap["user"]          = pgLists.user
-	clMap["database"]      = pgLists.database
+	clTags["user"]         = pgLists.user
+	clTags["database"]     = pgLists.database
 	clMap["state"]         = pgLists.state
 	clMap["addr"]          = pgLists.addr
 	clMap["port"]          = pgLists.port
@@ -262,10 +272,11 @@ func main() {
 	clMap["remote_pid"]    = pgLists.remote_pid
 	clMap["tls"]           = pgLists.tls
     }
+    svTags := make(map[string]string)
     for _, pgLists := range serversResult {
         svMap["type"]          = pgLists.sv_type
-        svMap["user"]          = pgLists.user
-        svMap["database"]      = pgLists.database
+        svTags["user"]         = pgLists.user
+        svTags["database"]     = pgLists.database
         svMap["state"]         = pgLists.state
         svMap["addr"]          = pgLists.addr
         svMap["port"]          = pgLists.port
@@ -278,8 +289,9 @@ func main() {
         svMap["remote_pid"]    = pgLists.remote_pid
         svMap["tls"]           = pgLists.tls
     }
+    statsTags := make(map[string]string)
     for _, pgLists := range statsResult {
-        statsMap["database"]     = pgLists.database
+        statsTags["database"]    = pgLists.database
 	statsMap["total_req"]    = pgLists.total_req
 	statsMap["total_rec"]    = pgLists.total_rec
 	statsMap["total_sent"]   = pgLists.total_sent
@@ -289,27 +301,28 @@ func main() {
 	statsMap["avg_sent"]     = pgLists.avg_sent
 	statsMap["avg_query"]    = pgLists.avg_query
     }
+    listsTags := make(map[string]string)
     for _, pgLists := range listsResult {
         listsMap[pgLists.list] = pgLists.items
+	
     }
-
-    // check empty maps
+    // check empty maps and construct batch DATA (conn name, measurement, tags, fields) 
     if len(poolsMap) > 0 {
-        bpPools, err := createPointBatch(inflxDb, "m_pools", "user", poolsMap)
+        bpPools, err := createPointBatch(inflxDb, "m_pools", poolsTags, poolsMap)
         writeBatch(inflxConnect, bpPools)
         if err != nil {
 	    log.Fatal(err)
         }
     }
     if len(dbMap) > 0 {
-        bpDb, err    := createPointBatch(inflxDb, "m_databases", "db", dbMap)
+        bpDb, err    := createPointBatch(inflxDb, "m_databases", dbTags, dbMap)
         writeBatch(inflxConnect, bpDb)
         if err != nil {
             log.Fatal(err)
         }
     }
     if len(clMap) > 0 {
-        bpCl, err    := createPointBatch(inflxDb, "m_clients", "client", clMap)
+        bpCl, err    := createPointBatch(inflxDb, "m_clients", clTags, clMap)
         writeBatch(inflxConnect, bpCl)
         if err != nil {
             log.Fatal(err)
@@ -317,21 +330,21 @@ func main() {
     }
     if len(svMap) > 0 {
     
-        bpSv, err   := createPointBatch(inflxDb, "m_servers", "server", svMap)
+        bpSv, err   := createPointBatch(inflxDb, "m_servers", svTags, svMap)
         writeBatch(inflxConnect, bpSv)
         if err != nil {
 	    log.Fatal(err)
         }
     }
     if len(statsMap) > 0 {
-        bpSt, err    := createPointBatch(inflxDb, "m_stats", "stats", statsMap)
+        bpSt, err    := createPointBatch(inflxDb, "m_stats", statsTags, statsMap)
         writeBatch(inflxConnect, bpSt)
         if err != nil {
             log.Fatal(err)
         }
     }
     if len(listsMap) > 0 {
-        bpLs, err    := createPointBatch(inflxDb, "m_lists", "lists", listsMap)
+        bpLs, err    := createPointBatch(inflxDb, "m_lists", listsTags, listsMap)
         writeBatch(inflxConnect, bpLs)
         if err != nil {
             log.Fatal(err)
@@ -514,7 +527,7 @@ InfluxDB Section
 */
 
 // Batch Points Constructor
-func createPointBatch(inflxDb string, measurement string, t string, fields map[string]interface{}) (bp client.BatchPoints, err error){
+func createPointBatch(inflxDb string, measurement string, tags map[string]string, fields map[string]interface{}) (bp client.BatchPoints, err error){
 
     // Create a new point batch
     bp, err = client.NewBatchPoints(client.BatchPointsConfig{
@@ -523,13 +536,7 @@ func createPointBatch(inflxDb string, measurement string, t string, fields map[s
     })
 
     // Construct tags and fields here
-    tags := map[string]string{"type": t}
-
-    //loc, err := time.LoadLocation("Europe/Moscow")
-    //if err != nil {
-    //	log.Fatal(err)
-    //  }
-    //tn := time.Now().In(loc)
+    //tags := map[string]string{"type": t}
 
     pt, err := client.NewPoint(measurement, tags, fields, time.Now())
     if err != nil {

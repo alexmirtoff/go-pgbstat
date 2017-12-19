@@ -1,0 +1,15 @@
+Zabbix Metrics:
+
+bouncerStat[databases]
+bouncerStat[pools]
+bouncerStat[used_servers]
+bouncerStat[dns_names]
+bouncerStat[dns_zones]
+bouncerStat[dns_queries]
+bouncerStat[dns_pending]
+bouncerStat[users]
+bouncerStat[free_clients]
+bouncerStat[used_clients]
+bouncerStat[login_clients]
+bouncerStat[free_servers]
+
