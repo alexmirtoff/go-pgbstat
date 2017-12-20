@@ -13,352 +13,347 @@ InfluxDB or Zabbix. Single database & user.
 package main
 
 import (
-    "fmt"
-    "os"
-    "time"
-    "log"
-    _ "github.com/lib/pq"
-    "database/sql"
-    "github.com/zpatrick/go-config"
-    "github.com/influxdata/influxdb/client/v2"
-    //. "github.com/blacked/go-zabbix"
+	"database/sql"
+	"fmt"
+	"github.com/influxdata/influxdb/client/v2"
+	_ "github.com/lib/pq"
+	"github.com/zpatrick/go-config"
+	"log"
+	"os"
+	"time"
+	//. "github.com/blacked/go-zabbix"
 )
 
-
 type PgbouncerPools struct {
-    database     string
-    user         string
-    cl_active	 int
-    cl_waiting 	 int
-    sv_active	 int
-    sv_idle	 int
-    sv_used	 int
-    sv_tested    int
-    sv_login     int
-    maxwait      int
-    pool_mode    string
+	database   string
+	user       string
+	cl_active  int
+	cl_waiting int
+	sv_active  int
+	sv_idle    int
+	sv_used    int
+	sv_tested  int
+	sv_login   int
+	maxwait    int
+	pool_mode  string
 }
 
 type PgbouncerDatabases struct {
-    name	  string
-    host	  sql.NullString
-    force_user	  string
-    port	  int
-    database	  string
-    pool_size     int
-    reserve_pool  int
-    pool_mode     string
-    max_conn	  int
-    curr_conn	  int
+	name         string
+	host         sql.NullString
+	force_user   string
+	port         int
+	database     string
+	pool_size    int
+	reserve_pool int
+	pool_mode    string
+	max_conn     int
+	curr_conn    int
 }
 
 type PgbouncerClients struct {
-    cl_type	  string
-    user	  string
-    database	  string
-    state	  string
-    addr	  string
-    port          int
-    local_addr    string
-    local_port	  int
-    connect_time  string
-    request_time  string
-    ptr		  string
-    link	  string
-    remote_pid    int
-    tls		  string
+	cl_type      string
+	user         string
+	database     string
+	state        string
+	addr         string
+	port         int
+	local_addr   string
+	local_port   int
+	connect_time string
+	request_time string
+	ptr          string
+	link         string
+	remote_pid   int
+	tls          string
 }
 
 type PgbouncerServers struct {
-    sv_type	  string
-    user	  string
-    database	  string
-    state	  string
-    addr	  string
-    port	  int
-    local_addr	  string
-    local_port    int
-    connect_time  string
-    request_time  string
-    ptr		  string
-    link	  string
-    remote_pid    string
-    tls		  string
+	sv_type      string
+	user         string
+	database     string
+	state        string
+	addr         string
+	port         int
+	local_addr   string
+	local_port   int
+	connect_time string
+	request_time string
+	ptr          string
+	link         string
+	remote_pid   string
+	tls          string
 }
 
 type PgbouncerStats struct {
-    database	  string
-    total_req     int
-    total_rec     int
-    total_sent    int
-    total_q_time  int
-    avg_req	  int
-    avg_recv	  int
-    avg_sent      int
-    avg_query	  int 
+	database     string
+	total_req    int
+	total_rec    int
+	total_sent   int
+	total_q_time int
+	avg_req      int
+	avg_recv     int
+	avg_sent     int
+	avg_query    int
 }
 
 type PgbouncerLists struct {
-    list	  string
-    items	  string
+	list  string
+	items string
 }
 
 type InfluxTags struct {
-    tag		  map[string]string
+	tag map[string]string
 }
 
 type InfluxFields struct {
-    field	  map[string]interface{}
+	field map[string]interface{}
 }
-
 
 // start here
 func main() {
-    conf := initConfig()
-    
+	conf := initConfig()
 
-    args := os.Args[1:]
-    if len(args) < 1 {
-	fmt.Print("go-pgbstat version 0.1\n\nUsage: go-pgbstat [-dv]\n")
-        fmt.Print("-d daemonize\n-v version\n\n")
-        os.Exit(0)
-    } else if os.Args[1] == "-v" {
-        fmt.Print("go-pgbstat version 0.1.2\n\u00a9 2017-2018 by Alex Mirtoff\ne-mail: amirtov@alfabank.ru\nhttps://github.com/alexmirtoff\n\n")
-	os.Exit(0)
-    } 
-    
-    // Global settings init
-    sendInt, err := conf.Int("global.send_interval")
-    if err != nil {
-        log.Fatal(err)
-    }
+	args := os.Args[1:]
+	if len(args) < 1 {
+		fmt.Print("go-pgbstat version 0.1\n\nUsage: go-pgbstat [-dv]\n")
+		fmt.Print("-d daemonize\n-v version\n\n")
+		os.Exit(0)
+	} else if os.Args[1] == "-v" {
+		fmt.Print("go-pgbstat version 0.1.2\n\u00a9 2017-2018 by Alex Mirtoff\ne-mail: amirtov@alfabank.ru\nhttps://github.com/alexmirtoff\n\n")
+		os.Exit(0)
+	}
 
-    // pgbouncer settings init
-    bhost, err := conf.String("pgbouncer.hostname")
-    if err != nil {
-        log.Fatal(err)
-    }
-    bdatabase, err := conf.String("pgbouncer.database")
-    if err != nil {
-        log.Fatal(err)
-    }
+	// Global settings init
+	sendInt, err := conf.Int("global.send_interval")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    bport, err := conf.String("pgbouncer.port")
-    if err != nil {
-        log.Fatal(err)
-    }
+	// pgbouncer settings init
+	bhost, err := conf.String("pgbouncer.hostname")
+	if err != nil {
+		log.Fatal(err)
+	}
+	bdatabase, err := conf.String("pgbouncer.database")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    busername, err := conf.String("pgbouncer.username")
-    if err != nil {
-        log.Fatal(err)
-    }
-    bpassword, err := conf.String("pgbouncer.password")
-    if err != nil {
-        log.Fatal(err)
-    }
+	bport, err := conf.String("pgbouncer.port")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    // Influx settings init
-    inflxHost, err := conf.String("influxdb.hostname")
-    if err != nil { 
-        log.Fatal(err)
-    } 
-    inflxPort, err := conf.String("influxdb.port")
-    if err != nil {
-        log.Fatal(err)
-    }
+	busername, err := conf.String("pgbouncer.username")
+	if err != nil {
+		log.Fatal(err)
+	}
+	bpassword, err := conf.String("pgbouncer.password")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    inflxHost = fmt.Sprintf("http://%s:%s", inflxHost, inflxPort)
-    inflxDb, err := conf.String("influxdb.database")
-    if err != nil {
-        log.Fatal(err)
-    }
-    inflxUser, err := conf.String("influxdb.username")
-    if err != nil {
-	log.Fatal(err)
-    }
-    inflxPwd, err := conf.String("influxdb.password")
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    /*
-    zabbixHost, err := conf.String("zabbix.hostname")
-    if err != nil {
-        log.Fatal(err)
-    }
-    zabbixPort, err := conf.String("zabbix.port")
-    if err != nil {
-        log.Fatal(err)
-    }
-    */
+	// Influx settings init
+	inflxHost, err := conf.String("influxdb.hostname")
+	if err != nil {
+		log.Fatal(err)
+	}
+	inflxPort, err := conf.String("influxdb.port")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-     // Create a new HTTP client
-    inflxConnect, err := client.NewHTTPClient(client.HTTPConfig{
-                  Addr:         inflxHost,
-                  Username:     inflxUser,
-                  Password:     inflxPwd,
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
+	inflxHost = fmt.Sprintf("http://%s:%s", inflxHost, inflxPort)
+	inflxDb, err := conf.String("influxdb.database")
+	if err != nil {
+		log.Fatal(err)
+	}
+	inflxUser, err := conf.String("influxdb.username")
+	if err != nil {
+		log.Fatal(err)
+	}
+	inflxPwd, err := conf.String("influxdb.password")
+	if err != nil {
+		log.Fatal(err)
+	}
 
- 
-    for {
+	/*
+	   zabbixHost, err := conf.String("zabbix.hostname")
+	   if err != nil {
+	       log.Fatal(err)
+	   }
+	   zabbixPort, err := conf.String("zabbix.port")
+	   if err != nil {
+	       log.Fatal(err)
+	   }
+	*/
 
-    sqlParams := fmt.Sprintf("host=%s user=%s password=%s port=%s dbname=%s sslmode=disable", bhost, busername, bpassword, bport, bdatabase) 
-    db, err := sql.Open("postgres", sqlParams)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
+	// Create a new HTTP client
+	inflxConnect, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr:     inflxHost,
+		Username: inflxUser,
+		Password: inflxPwd,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    poolsResult, err := getBouncerPoolData(db)
-    databasesResult, err := getBouncerDatabaseData(db)
-    clientsResult, err := getBouncerClientData(db)
-    serversResult, err := getBouncerServerData(db)
-    statsResult, err := getBouncerStatData(db)
-    listsResult, err := getBouncerListData(db)
+	for {
 
-    db.Close()
+		sqlParams := fmt.Sprintf("host=%s user=%s password=%s port=%s dbname=%s sslmode=disable", bhost, busername, bpassword, bport, bdatabase)
+		db, err := sql.Open("postgres", sqlParams)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-    poolsMap := make(map[string]interface{})
-    dbMap    := make(map[string]interface{})
-    clMap    := make(map[string]interface{})
-    svMap    := make(map[string]interface{})
-    statsMap := make(map[string]interface{})
-    listsMap := make(map[string]interface{})
+		poolsResult, err := getBouncerPoolData(db)
+		databasesResult, err := getBouncerDatabaseData(db)
+		clientsResult, err := getBouncerClientData(db)
+		serversResult, err := getBouncerServerData(db)
+		statsResult, err := getBouncerStatData(db)
+		listsResult, err := getBouncerListData(db)
 
-    poolsTags := make(map[string]string)
-    for _, pgLists := range poolsResult {
-        poolsTags["database"]  = pgLists.database
-        poolsTags["user"]      = pgLists.user
-        poolsMap["cl_active"]  = pgLists.cl_active
-	poolsMap["cl_waiting"] = pgLists.cl_waiting
-	poolsMap["sv_active"]  = pgLists.sv_active
-	poolsMap["sv_idle"]    = pgLists.sv_idle
-	poolsMap["sv_used"]    = pgLists.sv_used
-	poolsMap["sv_tested"]  = pgLists.sv_tested
-	poolsMap["sv_login"]   = pgLists.sv_login
-	poolsMap["maxwait"]    = pgLists.maxwait
-	poolsMap["pool_mode"]  = pgLists.pool_mode
-    }
-    dbTags := make(map[string]string)
-    for _, pgLists := range databasesResult {
-        dbTags["name"]	       = pgLists.name
-	dbMap["host"]          = pgLists.host
-	dbMap["port"]          = pgLists.port
-        dbTags["database"]     = pgLists.database
-	dbMap["force_user"]    = pgLists.force_user
-	dbMap["pool_size"]     = pgLists.pool_size
-	dbMap["reserve_pool"]  = pgLists.reserve_pool
-	dbMap["pool_mode"]     = pgLists.pool_mode
-	dbMap["max_conn"]      = pgLists.max_conn
-	dbMap["curr_conn"]     = pgLists.curr_conn
-    }
-    clTags := make(map[string]string)
-    for _, pgLists := range clientsResult {
-        clMap["type"]          = pgLists.cl_type
-	clTags["user"]         = pgLists.user
-	clTags["database"]     = pgLists.database
-	clMap["state"]         = pgLists.state
-	clMap["addr"]          = pgLists.addr
-	clMap["port"]          = pgLists.port
-	clMap["local_addr"]    = pgLists.local_addr
-	clMap["local_port"]    = pgLists.local_port
-	clMap["connect_time"]  = pgLists.connect_time
-	clMap["request_time"]  = pgLists.request_time
-	clMap["ptr"]           = pgLists.ptr
-	clMap["link"]          = pgLists.link
-	clMap["remote_pid"]    = pgLists.remote_pid
-	clMap["tls"]           = pgLists.tls
-    }
-    svTags := make(map[string]string)
-    for _, pgLists := range serversResult {
-        svMap["type"]          = pgLists.sv_type
-        svTags["user"]         = pgLists.user
-        svTags["database"]     = pgLists.database
-        svMap["state"]         = pgLists.state
-        svMap["addr"]          = pgLists.addr
-        svMap["port"]          = pgLists.port
-        svMap["local_addr"]    = pgLists.local_addr
-        svMap["local_port"]    = pgLists.local_port
-        svMap["connect_time"]  = pgLists.connect_time
-        svMap["request_time"]  = pgLists.request_time
-        svMap["ptr"]           = pgLists.ptr
-        svMap["link"]          = pgLists.link
-        svMap["remote_pid"]    = pgLists.remote_pid
-        svMap["tls"]           = pgLists.tls
-    }
-    statsTags := make(map[string]string)
-    for _, pgLists := range statsResult {
-        statsTags["database"]    = pgLists.database
-	statsMap["total_req"]    = pgLists.total_req
-	statsMap["total_rec"]    = pgLists.total_rec
-	statsMap["total_sent"]   = pgLists.total_sent
-	statsMap["total_q_time"] = pgLists.total_q_time
-	statsMap["avg_req"]      = pgLists.avg_req
-	statsMap["avg_recv"]     = pgLists.avg_recv
-	statsMap["avg_sent"]     = pgLists.avg_sent
-	statsMap["avg_query"]    = pgLists.avg_query
-    }
-    listsTags := make(map[string]string)
-    for _, pgLists := range listsResult {
-        listsMap[pgLists.list] = pgLists.items
-	
-    }
-    // check empty maps and construct batch DATA (conn name, measurement, tags, fields) 
-    if len(poolsMap) > 0 {
-        bpPools, err := createPointBatch(inflxDb, "m_pools", poolsTags, poolsMap)
-        writeBatch(inflxConnect, bpPools)
-        if err != nil {
-	    log.Fatal(err)
-        }
-    }
-    if len(dbMap) > 0 {
-        bpDb, err    := createPointBatch(inflxDb, "m_databases", dbTags, dbMap)
-        writeBatch(inflxConnect, bpDb)
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
-    if len(clMap) > 0 {
-        bpCl, err    := createPointBatch(inflxDb, "m_clients", clTags, clMap)
-        writeBatch(inflxConnect, bpCl)
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
-    if len(svMap) > 0 {
-    
-        bpSv, err   := createPointBatch(inflxDb, "m_servers", svTags, svMap)
-        writeBatch(inflxConnect, bpSv)
-        if err != nil {
-	    log.Fatal(err)
-        }
-    }
-    if len(statsMap) > 0 {
-        bpSt, err    := createPointBatch(inflxDb, "m_stats", statsTags, statsMap)
-        writeBatch(inflxConnect, bpSt)
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
-    if len(listsMap) > 0 {
-        bpLs, err    := createPointBatch(inflxDb, "m_lists", listsTags, listsMap)
-        writeBatch(inflxConnect, bpLs)
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
-   time.Sleep(time.Duration(sendInt) * time.Millisecond)
-   }
-  
+		db.Close()
+
+		poolsMap := make(map[string]interface{})
+		dbMap := make(map[string]interface{})
+		clMap := make(map[string]interface{})
+		svMap := make(map[string]interface{})
+		statsMap := make(map[string]interface{})
+		listsMap := make(map[string]interface{})
+
+		poolsTags := make(map[string]string)
+		for _, pgLists := range poolsResult {
+			poolsTags["database"] = pgLists.database
+			poolsTags["user"] = pgLists.user
+			poolsMap["cl_active"] = pgLists.cl_active
+			poolsMap["cl_waiting"] = pgLists.cl_waiting
+			poolsMap["sv_active"] = pgLists.sv_active
+			poolsMap["sv_idle"] = pgLists.sv_idle
+			poolsMap["sv_used"] = pgLists.sv_used
+			poolsMap["sv_tested"] = pgLists.sv_tested
+			poolsMap["sv_login"] = pgLists.sv_login
+			poolsMap["maxwait"] = pgLists.maxwait
+			poolsMap["pool_mode"] = pgLists.pool_mode
+		}
+		dbTags := make(map[string]string)
+		for _, pgLists := range databasesResult {
+			dbTags["name"] = pgLists.name
+			dbMap["host"] = pgLists.host
+			dbMap["port"] = pgLists.port
+			dbTags["database"] = pgLists.database
+			dbMap["force_user"] = pgLists.force_user
+			dbMap["pool_size"] = pgLists.pool_size
+			dbMap["reserve_pool"] = pgLists.reserve_pool
+			dbMap["pool_mode"] = pgLists.pool_mode
+			dbMap["max_conn"] = pgLists.max_conn
+			dbMap["curr_conn"] = pgLists.curr_conn
+		}
+		clTags := make(map[string]string)
+		for _, pgLists := range clientsResult {
+			clMap["type"] = pgLists.cl_type
+			clTags["user"] = pgLists.user
+			clTags["database"] = pgLists.database
+			clMap["state"] = pgLists.state
+			clMap["addr"] = pgLists.addr
+			clMap["port"] = pgLists.port
+			clMap["local_addr"] = pgLists.local_addr
+			clMap["local_port"] = pgLists.local_port
+			clMap["connect_time"] = pgLists.connect_time
+			clMap["request_time"] = pgLists.request_time
+			clMap["ptr"] = pgLists.ptr
+			clMap["link"] = pgLists.link
+			clMap["remote_pid"] = pgLists.remote_pid
+			clMap["tls"] = pgLists.tls
+		}
+		svTags := make(map[string]string)
+		for _, pgLists := range serversResult {
+			svMap["type"] = pgLists.sv_type
+			svTags["user"] = pgLists.user
+			svTags["database"] = pgLists.database
+			svMap["state"] = pgLists.state
+			svMap["addr"] = pgLists.addr
+			svMap["port"] = pgLists.port
+			svMap["local_addr"] = pgLists.local_addr
+			svMap["local_port"] = pgLists.local_port
+			svMap["connect_time"] = pgLists.connect_time
+			svMap["request_time"] = pgLists.request_time
+			svMap["ptr"] = pgLists.ptr
+			svMap["link"] = pgLists.link
+			svMap["remote_pid"] = pgLists.remote_pid
+			svMap["tls"] = pgLists.tls
+		}
+		statsTags := make(map[string]string)
+		for _, pgLists := range statsResult {
+			statsTags["database"] = pgLists.database
+			statsMap["total_req"] = pgLists.total_req
+			statsMap["total_rec"] = pgLists.total_rec
+			statsMap["total_sent"] = pgLists.total_sent
+			statsMap["total_q_time"] = pgLists.total_q_time
+			statsMap["avg_req"] = pgLists.avg_req
+			statsMap["avg_recv"] = pgLists.avg_recv
+			statsMap["avg_sent"] = pgLists.avg_sent
+			statsMap["avg_query"] = pgLists.avg_query
+		}
+		listsTags := make(map[string]string)
+		for _, pgLists := range listsResult {
+			listsMap[pgLists.list] = pgLists.items
+
+		}
+		// check empty maps and construct batch DATA (conn name, measurement, tags, fields)
+		if len(poolsMap) > 0 {
+			bpPools, err := createPointBatch(inflxDb, "m_pools", poolsTags, poolsMap)
+			writeBatch(inflxConnect, bpPools)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if len(dbMap) > 0 {
+			bpDb, err := createPointBatch(inflxDb, "m_databases", dbTags, dbMap)
+			writeBatch(inflxConnect, bpDb)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if len(clMap) > 0 {
+			bpCl, err := createPointBatch(inflxDb, "m_clients", clTags, clMap)
+			writeBatch(inflxConnect, bpCl)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if len(svMap) > 0 {
+
+			bpSv, err := createPointBatch(inflxDb, "m_servers", svTags, svMap)
+			writeBatch(inflxConnect, bpSv)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if len(statsMap) > 0 {
+			bpSt, err := createPointBatch(inflxDb, "m_stats", statsTags, statsMap)
+			writeBatch(inflxConnect, bpSt)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		if len(listsMap) > 0 {
+			bpLs, err := createPointBatch(inflxDb, "m_lists", listsTags, listsMap)
+			writeBatch(inflxConnect, bpLs)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		time.Sleep(time.Duration(sendInt) * time.Millisecond)
+	}
+
 }
 
 // init config.ini
 func initConfig() *config.Config {
-    iniFile := config.NewINIFile("config.ini")
-    return config.NewConfig([]config.Provider{iniFile})
+	iniFile := config.NewINIFile("config.ini")
+	return config.NewConfig([]config.Provider{iniFile})
 }
 
 /*
@@ -367,157 +362,156 @@ PgBouncer Section
 
 */
 
-
 // getting POOLS data
-func getBouncerPoolData(db *sql.DB) (Pools[]*PgbouncerPools, err error) {
+func getBouncerPoolData(db *sql.DB) (Pools []*PgbouncerPools, err error) {
 
-    rows, err := db.Query("SHOW POOLS")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+	rows, err := db.Query("SHOW POOLS")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-    result := make([]*PgbouncerPools, 0)
-    for rows.Next() {
-        pgPools := new(PgbouncerPools)
-        err := rows.Scan(&pgPools.database, &pgPools.user, &pgPools.cl_active, &pgPools.cl_waiting, &pgPools.sv_active,
-                         &pgPools.sv_idle, &pgPools.sv_used, &pgPools.sv_tested, &pgPools.sv_login, &pgPools.maxwait, &pgPools.pool_mode)
-        if err != nil {
-            log.Fatal(err)
-        }
-        result = append(result, pgPools)
-    }
-    if err = rows.Err(); err != nil {
-        log.Fatal(err)
-    }
-    return result, err
+	result := make([]*PgbouncerPools, 0)
+	for rows.Next() {
+		pgPools := new(PgbouncerPools)
+		err := rows.Scan(&pgPools.database, &pgPools.user, &pgPools.cl_active, &pgPools.cl_waiting, &pgPools.sv_active,
+			&pgPools.sv_idle, &pgPools.sv_used, &pgPools.sv_tested, &pgPools.sv_login, &pgPools.maxwait, &pgPools.pool_mode)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, pgPools)
+	}
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return result, err
 
 }
 
 // getting DATABASES data
-func getBouncerDatabaseData(db *sql.DB) (Databases[]*PgbouncerDatabases, err error) {
+func getBouncerDatabaseData(db *sql.DB) (Databases []*PgbouncerDatabases, err error) {
 
-    rows, err := db.Query("SHOW DATABASES")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+	rows, err := db.Query("SHOW DATABASES")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-    result := make([]*PgbouncerDatabases, 0)
-    for rows.Next() {
-        pgDatabases := new(PgbouncerDatabases)
-        err := rows.Scan(&pgDatabases.name, &pgDatabases.host, &pgDatabases.port, &pgDatabases.database, &pgDatabases.force_user,
-                         &pgDatabases.pool_size, &pgDatabases.reserve_pool, &pgDatabases.pool_mode, &pgDatabases.max_conn, &pgDatabases.curr_conn)
-        if err != nil {
-            log.Fatal(err)
-        }
-	result = append(result, pgDatabases)
-    }
-    if err = rows.Err(); err != nil {
-        log.Fatal(err)
-    }
-    return result, err
+	result := make([]*PgbouncerDatabases, 0)
+	for rows.Next() {
+		pgDatabases := new(PgbouncerDatabases)
+		err := rows.Scan(&pgDatabases.name, &pgDatabases.host, &pgDatabases.port, &pgDatabases.database, &pgDatabases.force_user,
+			&pgDatabases.pool_size, &pgDatabases.reserve_pool, &pgDatabases.pool_mode, &pgDatabases.max_conn, &pgDatabases.curr_conn)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, pgDatabases)
+	}
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return result, err
 }
 
 // getting CLIENTS data
-func getBouncerClientData(db *sql.DB) (Clients[]*PgbouncerClients, err error) {
+func getBouncerClientData(db *sql.DB) (Clients []*PgbouncerClients, err error) {
 
-    rows, err := db.Query("SHOW CLIENTS")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+	rows, err := db.Query("SHOW CLIENTS")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-    result := make([]*PgbouncerClients, 0)
-    for rows.Next() {
-        pgClients := new(PgbouncerClients)
-        err := rows.Scan(&pgClients.cl_type, &pgClients.user, &pgClients.database, &pgClients.state, &pgClients.addr, &pgClients.port,
-                         &pgClients.local_addr, &pgClients.local_port, &pgClients.connect_time, &pgClients.request_time, &pgClients.ptr,
-                         &pgClients.link, &pgClients.remote_pid, &pgClients.tls)
-        if err != nil {
-            log.Fatal(err)
-        }
-        result = append(result, pgClients)
-    }
-    if err = rows.Err(); err != nil {
-        log.Fatal(err)
-    }
-    return result, err
+	result := make([]*PgbouncerClients, 0)
+	for rows.Next() {
+		pgClients := new(PgbouncerClients)
+		err := rows.Scan(&pgClients.cl_type, &pgClients.user, &pgClients.database, &pgClients.state, &pgClients.addr, &pgClients.port,
+			&pgClients.local_addr, &pgClients.local_port, &pgClients.connect_time, &pgClients.request_time, &pgClients.ptr,
+			&pgClients.link, &pgClients.remote_pid, &pgClients.tls)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, pgClients)
+	}
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return result, err
 }
 
 // getting SERVERS data
-func getBouncerServerData(db *sql.DB) (Servers[]*PgbouncerServers, err error) {
+func getBouncerServerData(db *sql.DB) (Servers []*PgbouncerServers, err error) {
 
-    rows, err := db.Query("SHOW SERVERS")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+	rows, err := db.Query("SHOW SERVERS")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-    result := make([]*PgbouncerServers, 0)
-    for rows.Next() {
-        pgServers := new(PgbouncerServers)
-        err := rows.Scan(&pgServers.sv_type, &pgServers.user, &pgServers.database, &pgServers.state, &pgServers.addr, &pgServers.port,
-			 &pgServers.local_addr, &pgServers.local_port, &pgServers.connect_time, &pgServers.request_time, &pgServers.ptr,
-		         &pgServers.link, &pgServers.remote_pid, &pgServers.tls)
-        if err != nil {
-            log.Fatal(err)
-        }
-        result = append(result, pgServers)
-    }
-    if err = rows.Err(); err != nil {
-        log.Fatal(err)
-    }
-    return result, err
+	result := make([]*PgbouncerServers, 0)
+	for rows.Next() {
+		pgServers := new(PgbouncerServers)
+		err := rows.Scan(&pgServers.sv_type, &pgServers.user, &pgServers.database, &pgServers.state, &pgServers.addr, &pgServers.port,
+			&pgServers.local_addr, &pgServers.local_port, &pgServers.connect_time, &pgServers.request_time, &pgServers.ptr,
+			&pgServers.link, &pgServers.remote_pid, &pgServers.tls)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, pgServers)
+	}
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return result, err
 }
 
 // getting STATS data
-func getBouncerStatData(db *sql.DB) (Stats[]*PgbouncerStats, err error) {
+func getBouncerStatData(db *sql.DB) (Stats []*PgbouncerStats, err error) {
 
-    rows, err := db.Query("SHOW STATS")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+	rows, err := db.Query("SHOW STATS")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-    result := make([]*PgbouncerStats, 0)
-    for rows.Next() {
-        pgStats := new(PgbouncerStats)
-        err := rows.Scan(&pgStats.database, &pgStats.total_req, &pgStats.total_rec, &pgStats.total_sent, &pgStats.total_q_time,
-		         &pgStats.avg_req, &pgStats.avg_recv, &pgStats.avg_sent, &pgStats.avg_query)
-        if err != nil {
-            log.Fatal(err)
-        }
-        result = append(result, pgStats)
-    }
-    if err = rows.Err(); err != nil {
-        log.Fatal(err)
-    }
-    return result, err
+	result := make([]*PgbouncerStats, 0)
+	for rows.Next() {
+		pgStats := new(PgbouncerStats)
+		err := rows.Scan(&pgStats.database, &pgStats.total_req, &pgStats.total_rec, &pgStats.total_sent, &pgStats.total_q_time,
+			&pgStats.avg_req, &pgStats.avg_recv, &pgStats.avg_sent, &pgStats.avg_query)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, pgStats)
+	}
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return result, err
 }
 
 // getting LISTS data
-func getBouncerListData(db *sql.DB) (Lists[]*PgbouncerLists, err error) {
+func getBouncerListData(db *sql.DB) (Lists []*PgbouncerLists, err error) {
 
-    rows, err := db.Query("SHOW LISTS")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer rows.Close()
+	rows, err := db.Query("SHOW LISTS")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
 
-    result := make([]*PgbouncerLists, 0)
-    for rows.Next() {
-        pgLists := new(PgbouncerLists)
-        err := rows.Scan(&pgLists.list, &pgLists.items)
-        if err != nil {
-            log.Fatal(err)
-        }
-        result = append(result, pgLists)
-    }
-    if err = rows.Err(); err != nil {
-        log.Fatal(err)
-    }
-    return result, err
+	result := make([]*PgbouncerLists, 0)
+	for rows.Next() {
+		pgLists := new(PgbouncerLists)
+		err := rows.Scan(&pgLists.list, &pgLists.items)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, pgLists)
+	}
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return result, err
 }
 
 /*
@@ -527,32 +521,32 @@ InfluxDB Section
 */
 
 // Batch Points Constructor
-func createPointBatch(inflxDb string, measurement string, tags map[string]string, fields map[string]interface{}) (bp client.BatchPoints, err error){
+func createPointBatch(inflxDb string, measurement string, tags map[string]string, fields map[string]interface{}) (bp client.BatchPoints, err error) {
 
-    // Create a new point batch
-    bp, err = client.NewBatchPoints(client.BatchPointsConfig{
-                  Database:     inflxDb,
-                  Precision:    "s",
-    })
+	// Create a new point batch
+	bp, err = client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  inflxDb,
+		Precision: "s",
+	})
 
-    // Construct tags and fields here
-    //tags := map[string]string{"type": t}
+	// Construct tags and fields here
+	//tags := map[string]string{"type": t}
 
-    pt, err := client.NewPoint(measurement, tags, fields, time.Now())
-    if err != nil {
-       log.Fatal(err)
-    }
-    bp.AddPoint(pt)
-    return bp, err
+	pt, err := client.NewPoint(measurement, tags, fields, time.Now())
+	if err != nil {
+		log.Fatal(err)
+	}
+	bp.AddPoint(pt)
+	return bp, err
 
 }
 
 // Write Batch
 func writeBatch(inflxConnect client.Client, BPoint client.BatchPoints) {
 
- if err := inflxConnect.Write(BPoint); err != nil {
-        log.Fatal(err)
- }
- inflxConnect.Close()
+	if err := inflxConnect.Write(BPoint); err != nil {
+		log.Fatal(err)
+	}
+	inflxConnect.Close()
 
 }
